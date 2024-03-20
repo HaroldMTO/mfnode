@@ -1,0 +1,16 @@
+Package: mfnode
+Type: Package
+Title: Parse log files produced by NWP models from Meteo France / ECMWF / ACCORD
+Version: 1.0
+Date: 2024-02-29
+Author: Harold Petithomme
+Maintainer: <harold.petithomme@meteo.fr>
+Description: Functions for parsing log files produced by NWP models from
+ Meteo France / ECMWF / ACCORD, the so-called "NODE" files
+ Parsed elements are spectral and grid-point norms, runtime information, "Jo" tables or
+ "VarQC" values.
+ Other functions also exist for reading and writing specific Meteo France / ACCORD
+  data files, so-called "FA format"
+License: no license
+Depends: methods
+Collate: parsenode.R norms.R Domain.R GaussGrid.R fa.R grids.R

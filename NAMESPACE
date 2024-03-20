@@ -1,0 +1,13 @@
+import(methods)
+
+export(Gint,Gndigits,Gnum,gpfre)
+
+exportClasses(Domain,GaussGrid)
+
+exportMethods(initialize,shift)
+
+export(diagstep,digitsdiff,fclines,fpnorm,getvar,gpnorm,gpnorm2D,
+	intlines,jotable,line2num,numlines,plotmean,plotmnx,plotvmean,plotvmnx,rangeLong,
+	runtime,shortnames,spnorm,stepindex,sulines,varqc)
+
+export(getFrame,getField,getGPFields,getSPFields)
