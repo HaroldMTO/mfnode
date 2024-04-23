@@ -13,4 +13,4 @@ Description: Functions for parsing log files produced by NWP models from
   data files, so-called "FA format"
 License: no license
 Depends: methods
-Collate: parsenode.R norms.R Domain.R GaussGrid.R fa.R grids.R
+Collate: parsenode.R norms.R

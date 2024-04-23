@@ -1,4 +1,5 @@
-Gnum = "-?\\d*\\.\\d+([eE]?[-+]?\\d+)?\\>"
+Gnum = "-?(\\d+\\.\\d*|\\d*\\.\\d+([eE]?[-+]?\\d+)?\\>)"
+#Gnum = "-?\\d*\\.\\d+([eE]?[-+]?\\d+)?\\>"
 Gint = "-?\\d+\\>"
 gpfre1 = "[UVW] VELOCITY|(SURFACE )?PRESSURE|TEMPERATURE|GRAD[LM]_\\w+|GEOPOTENTIAL"
 gpfre2 = "MOIST AIR SPECIF|ISOBARE CAPACITY|SURFACE DIV|d\\(DIV\\)\\*dP"
@@ -305,7 +306,7 @@ gpnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 		gpstepf = stepindex(nd,ind[indg])
 		ist = (is.na(gpstep) | duplicated(gpstep) | regexpr("^X",gpstepf) > 0) &
 			! is.na(gpstepf)
-		if (any(ist)) gptep[ist] = gpstepf[ist]
+		if (any(ist)) gpstep[ist] = gpstepf[ist]
 	}
 
 	if (abbrev) noms = shortnames(noms)
@@ -388,9 +389,9 @@ gpnorm2D = function(nd,lines.only=FALSE)
 	surf[sapply(surf,length) > 0]
 }
 
-fpnorm = function(nd,lines.only=FALSE)
+fpgpnorm = function(nd,lev,lines.only=FALSE)
 {
-	ind = grep("^ *(FULL-POS +)?GPNORMS( +OF FIELDS)?",nd)
+	ind = grep("^ *(FULL-POS +GPNORMS|GPNORMS +OF FIELDS)",nd)
 	if (lines.only) return(ind)
 
 	if (length(ind) == 0) {
@@ -399,32 +400,45 @@ fpnorm = function(nd,lines.only=FALSE)
 	}
 
 	nflevg = getvar("NFLEVG",nd)
+	nfp3s = getvar("NFP3S",nd)
 	indf = grep("^ *(\\w+|[. '/])+\\w+ *: [+-]?\\d*\\.\\d+",nd)
 	for (i in seq(along=ind)) {
 		ii = indf[indf >= ind[i]+1]
 		ind2 = which(diff(ii) > 1)
 		if (length(ind2) > 0) ii = ii[1:ind2[1]]
 
-		gpl = list()
+		i3d = grep("^ *S\\d+\\w+",nd[ii])
+		if (length(i3d) == 0) {
+			gpl = list()
+		} else {
+			noms = unique(sub("^ *S\\d+(\\w+.*\\>) *:.+","\\1",nd[ii[i3d]]))
+			gpl = vector("list",length(noms))
+			names(gpl) = noms
 
-		if (any(regexpr("^ *S\\d+\\w+",nd[ii]) > 0)) {
-			noms = unique(sub("^ *S\\d+(\\w+.*\\>) *:.+","\\1",nd[ii]))
 			for (j in seq(along=noms)) {
 				inds = grep(sprintf(" *S\\d+%s *:",noms[j]),nd[ii])
-				stopifnot(length(inds) == nflevg)
+				if (length(inds) < 3 && nflevg > 2) {
+					cat("--> field",noms[j],"not 3D (maybe only top/bottom PP)\n")
+					#ii = ii[-inds]
+					next
+				}
+
+				stopifnot(length(inds) %in% c(nfp3s,nflevg))
 				fp = line2num(nd[ii[inds]])
 				re = sprintf(" *S0*(\\d+)%s *:.+",noms[j])
-				lev = as.integer(sub(re,"\\1",nd[ii[inds]]))
-				gpl[[j]] = fp[,order(lev)]
+				levs = as.integer(sub(re,"\\1",nd[ii[inds]]))
+				gpl[[j]] = fp[,order(levs)]
 				ii = ii[-inds]
 			}
 
-			names(gpl) = noms
+			gpl = gpl[! sapply(gpl,is.null)]
 		}
 
 		if (length(ii) > 0) {
 			gpl2 = lapply(strsplit(sub(".+: +","",nd[ii])," +"),as.numeric)
-			names(gpl2) = sub("^ *((\\w+|[. '/])+\\w+) *:.+","\\1",nd[ii])
+			noms = sub("^ *((\\w+|[. '/])+\\w+) *:.+","\\1",nd[ii])
+			stopifnot(all(sapply(gpl2,length) == 3))
+			names(gpl2) = noms
 			gpl = c(gpl,gpl2)
 		}
 
@@ -434,30 +448,105 @@ fpnorm = function(nd,lines.only=FALSE)
 		}
 
 		indv = match(names(gpl),names(fpl))
-		iv = names(gpl) %in% names(fpl)
-		for (j in which(iv)) {
-			fpl[[indv[j]]] = c(fpl[[indv[j]]],gpl[[iv[j]]])
-		}
+		for (j in which(! is.na(indv))) fpl[[indv[j]]] = c(fpl[[indv[j]]],gpl[[j]])
 
+		iv = names(gpl) %in% names(fpl)
 		if (any(! iv)) fpl = c(fpl,gpl[! iv])
 	}
 
 	fpstep = unique(stepindex(nd,ind))
+	cat("-->",fpstep,"FP events found\n")
+
+	indf = integer()
 
 	for (i in seq(along=fpl)) {
-		if (length(fpl[[i]]) == 3*length(fpstep)) {
-			dim(fpl[[i]]) = c(3,length(fpstep))
-			fpl[[i]] = t(fpl[[i]])
+		fp = fpl[[i]]
+		if (length(fp) == 3*length(fpstep)) {
+			dim(fp) = c(3,length(fpstep))
+			fpl[[i]] = t(fp)
 			dimnames(fpl[[i]]) = list(fpstep,c("ave","min","max"))
 		} else {
-			stopifnot(length(fpl[[i]]) == 3*length(fpstep)*nflevg)
-			dim(fpl[[i]]) = c(3,nflevg,length(fpstep))
-			fpl[[i]] = aperm(fpl[[i]])
-			dimnames(fpl[[i]]) = list(fpstep,lev,c("ave","min","max"))
+			nlev = length(fp)/(3*length(fpstep))
+			if (! nlev %in% c(nflevg,nfp3s)) {
+				cat("--> field",names(fpl)[i],length(fp),"not present at all events or levels, pass\n")
+				indf = c(indf,i)
+				next
+			}
+
+			stopifnot(length(fp) == 3*length(fpstep)*nlev)
+
+			dim(fp) = c(3,nlev,length(fpstep))
+
+			fpl[[i]] = aperm(fp)
+			dimnames(fpl[[i]]) = list(fpstep,seq(nlev),c("ave","min","max"))
 		}
 	}
 
-	fpl
+	if (length(indf) > 0) fpl = fpl[-indf]
+	ndim = sapply(fpl,function(x) length(dim(x)))
+
+	if (lev == 0) {
+		fp = sapply(fpl[ndim == 3],function(x) apply(x,c(1,3),mean),simplify="array")
+		if (any(ndim == 2)) {
+			fp3m = fp
+			fp2 = simplify2array(fpl[ndim == 2])
+			fp = array(c(fp2,fp),c(dim(fp2)[1],3,dim(fp2)[3]+dim(fp3m)[3]))
+			dimnames(fp)[[2]] = c("ave","min","max")
+			dimnames(fp)[[3]] = c(dimnames(fp2)[[3]],dimnames(fp3m)[[3]])
+		}
+	} else if (lev == -1) {
+		fp = simplify2array(fpl[ndim == 3])
+	} else {
+		fp = sapply(fpl[ndim == 3],function(x) x[,lev,,drop=FALSE],simplify="array")
+		fp = fp[,1,,]
+	}
+
+	fp
+}
+
+fpspnorm = function(nd,lev=-1,lines.only=FALSE)
+{
+	ind = grep("^ *(FULL-POS +)?SPNORMS",nd)
+	if (lines.only) return(ind)
+
+	if (length(ind) == 0) {
+		cat("--> no FP norms found\n")
+		return(NULL)
+	}
+
+	nflevg = getvar("NFLEVG",nd)
+	nfp3s = getvar("NFP3S",nd)
+
+	resp = "(S\\d+)?(\\w+(\\.\\w+)*)"
+	indf = grep(sprintf("^ *%s *: %s$",resp,Gnum),nd)
+	indg = grep("^ *(FULL-POS +)?GPNORMS",nd)
+	indf = indf[indf > ind]
+	if (length(indg) > 0) indf = indf[indf < indg[length(indg)]]
+
+	ndfp = nd[indf]
+
+	noms = unique(sub(sprintf("^ *%s.+",resp),"\\2",ndfp))
+	i3d = grep("^ *S\\d+\\w+",ndfp)
+	noms3d = unique(sub("^ *S\\d+(\\w+(\\.\\w+)*).+","\\1",ndfp[i3d]))
+
+	ind = grep(sprintf("^ *%s *: %s$",resp,Gnum),ndfp)
+	fp3d = array(numlines(ndfp[ind]),dim=c(nfp3s,length(noms3d)),
+		dimnames=list(1:nfp3s,noms3d))
+
+	if (lev == 0) {
+		noms2d = noms[! noms %in% noms3d]
+		ind = grep(sprintf("^ *S\\d+\\w+",resp),ndfp,invert=TRUE)
+		fp2d = numlines(ndfp[ind])
+		names(fp2d) = noms2d
+		fp3m = apply(fp3d,2,mean)
+		fp = c(fp2d,fp3m)
+	} else if (lev > 0) {
+		fp = fp3d[lev,]
+	} else {
+		fp = fp3d
+	}
+
+	fp
 }
 
 stepindex = function(nd,ind,prestepo=FALSE)
@@ -588,7 +677,7 @@ indexpand = function(nd,ind,indg,nl2,average=TRUE)
 
 shortnames = function(x)
 {
-	x[x == "KINETIC ENERGY"] = "TKE"
+	x[x == "KINETIC ENERGY"] = "KIN ENERGY"
 	x[x == "LOG(PRE/PREHYD)"] = "LOG(P/P_hyd)"
 	x[grep("d4 *= *VERT DIV *\\+ *X",x)] = "d4 (= vdiv+X)"
 	x[grep("d5 *= *VERT DIV *\\+ *X",x)] = "d5 (= vdiv+X+Xs)"

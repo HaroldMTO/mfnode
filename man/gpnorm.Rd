@@ -31,7 +31,7 @@ If lines.only is false (default), an array of GP norms.
 If true, heading lines of GP norms are returned.
 }
 \seealso{
-spnorm, fpnorm
+spnorm, fpgpnorm, fpspnorm
 }
 \examples{
 nd = readLines(system.file("data/NODE.001_01",package="mfnode"))
