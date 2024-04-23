@@ -23,7 +23,7 @@ If lines.only is false (default), an array of steps, levels and statistical valu
 If true, lines of SP norm for Full-POS fields are returned.
 }
 \seealso{
-fpgpnorm, spnorm, gpnorm
+fpgpnorm, fpspnorm, gpnorm, gpnorm2D
 }
 \examples{
 nd = readLines(system.file("NODE.001_01",package="mfnode"))

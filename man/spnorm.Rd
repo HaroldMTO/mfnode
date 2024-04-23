@@ -2,7 +2,7 @@
 \alias{spnorm}
 \title{Array of SP norms}
 \description{
-Extract to an array the SP norm information from a NODE file (via its lines)
+Extract to an array the SP norm information from a NODE file
 }
 \usage{spnorm(nd,lev=0,tag="NORMS AT (ART|NSTEP|END) CNT4",lines.only=FALSE,abbrev=TRUE)}
 
@@ -26,7 +26,7 @@ If lines.only is false (default), an array of SP norms.
 If true, heading lines of SP norms are returned.
 }
 \seealso{
-gpnorm, fpnorm
+gpnorm, gpnorm2D, fpspnorm, fpgpnorm
 }
 \examples{
 nd = readLines(system.file("data/NODE.001_01",package="mfnode"))

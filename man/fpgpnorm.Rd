@@ -1,6 +1,6 @@
 \name{fpgpnorm}
 \alias{fpgpnorm}
-\title{Get GP norms from a NODE file for Full-POS fields}
+\title{GP norms for Full-POS fields}
 \description{
 Extract the GP norm information from a NODE file for Full-POS fields
 }
