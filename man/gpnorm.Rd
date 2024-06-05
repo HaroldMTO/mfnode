@@ -5,7 +5,7 @@
 Extract to an array the GP norm information from a NODE file
 }
 \usage{gpnorm(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
- gpout=character,lines.only=FALSE,abbrev=TRUE)}
+ gpout=character,abbrev=TRUE)}
 
 \arguments{
 \item{nd}{character vector of lines read from a NODE file}
@@ -16,7 +16,6 @@ Extract to an array the GP norm information from a NODE file
 \item{tag}{regular expression matching the heading line for GP norm lines}
 \item{gpin}{regular expression matching field names to include in GP norm lines}
 \item{gpout}{regular expression matching field names to exclude from GP norm lines}
-\item{lines.only}{logical. If true, only GP norm heading lines are returned.}
 \item{abbrev}{logical. If true, shorten dimnames 3, that is, names of variables.}
 }
 \details{
@@ -27,8 +26,7 @@ The third dimension, 3, contains values for average, minimum and maximum values 
  field.
 }
 \value{
-If lines.only is false (default), an array of GP norms.
-If true, heading lines of GP norms are returned.
+An array of GP norms for steps, levels and variables found.
 }
 \seealso{
 gpnorm2D, spnorm, fpgpnorm, fpspnorm

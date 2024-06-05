@@ -41,7 +41,10 @@ numlines = function(nd)
 sulines = function(nd,strict=FALSE)
 {
 	iend = grep("\\<END OF SETUPS\\>",nd)
-	if (strict && length(iend) == 0) stop("no line matching 'END OF SETUPS'")
+	if (length(iend) == 0) {
+		if (strict) stop("no line matching 'END OF SETUPS'")
+		return(nd)
+	}
 
 	nd[seq(iend)]
 }
@@ -111,8 +114,7 @@ normtags = function(nd,type)
 	tags
 }
 
-spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",lines.only=FALSE,
-	abbrev=TRUE)
+spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 {
 	lev = as.integer(lev)
 
@@ -125,7 +127,6 @@ spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",lines.only=FALSE,
 	nd = fclines(nd)
 
 	ind = grep("SPECTRAL NORMS",nd)
-	if (lines.only) return(ind)
 
 	# normal (ie predictor) is 1 line before, corrector (if present) is 2 lines before
 	indg = grep(tag,nd[ind-1],ignore.case=TRUE)
@@ -214,7 +215,7 @@ spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",lines.only=FALSE,
 }
 
 gpnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
-	gpout=character(),lines.only=FALSE,abbrev=TRUE)
+	gpout=character(),abbrev=TRUE)
 {
 	lev = as.integer(lev)
 
@@ -232,8 +233,6 @@ gpnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	indo = grep(sprintf("GPNORM +(%s) +AVERAGE",gpout),nd[ind],invert=TRUE)
 	ind = ind[indo]
 	if (length(ind) == 0) return(NULL)
-
-	if (lines.only) return(ind)
 
 	nl2 = 2+has.levels*nflevg
 
@@ -321,7 +320,7 @@ gpnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	gpn
 }
 
-gpnorm2D = function(nd,lines.only=FALSE)
+gpnorm2D = function(nd)
 {
 	ind = grep("^ *NUMFLDS=",nd)
 	nfg = as.integer(sub(" *NUMFLDS= *(\\d+) .+","\\1",nd[ind]))
@@ -329,7 +328,6 @@ gpnorm2D = function(nd,lines.only=FALSE)
 	nfg = nfg[nfg > 0]
 	# in CANARI, several prints of the setup of surface fields
 	ind = ind[! duplicated(nd[ind-1])]
-	if (lines.only) return(ind)
 
 	if (length(ind) == 0) {
 		cat("--> no GP norms found for surface fields\n")
@@ -525,13 +523,30 @@ fpgpnorm = function(nd,lev,tag,quiet=FALSE)
 	if (identical(lev,0L)) {
 		fp = sapply(fpl,vmean,simplify="array")
 	} else {
-		nlevx = max(sapply(fpl,attr,"nlev"))
+		nlev = sapply(fpl,attr,"nlev")
+		nlevx = max(nlev)
 		stopifnot(all(lev %in% seq(nlevx)))
-		fp3 = fpl[sapply(fpl,attr,"nlev") == nlevx]
+		fp3 = fpl[nlev == nlevx]
+		if (length(fp3) == 0) return(NULL)
+
 		fp = sapply(fp3,function(x) x[it,lev,,drop=FALSE],simplify="array")
 	}
 
-	dimnames(fp)[[1]] = fpstep
+	# try setting names for steps, not sure it succeeds
+	nt = dim(fp)[1]
+	if (length(fpstep) < nt) {
+		warning("fpstep not used")
+	} else {
+		dimnames(fp)[[1]] = fpstep[1:nt]
+	}
+
+	dn = dimnames(fp)
+	if (length(dn) == 3) {
+		d = dim(fp)
+		dim(fp) = c(d[1],1,d[2:3])
+		dimnames(fp) = c(dn[1],list(lev),dn[2:3])
+	}
+
 	fp
 }
 
@@ -544,10 +559,9 @@ vmean = function(x,it)
 	}
 }
 
-fpspnorm = function(nd,lev,lines.only=FALSE)
+fpspnorm = function(nd,lev)
 {
 	ind = grep("^ *(FULL-POS +)?SPNORMS",nd)
-	if (lines.only) return(ind)
 
 	if (length(ind) == 0) {
 		cat("--> no FP norms found\n")
@@ -556,36 +570,60 @@ fpspnorm = function(nd,lev,lines.only=FALSE)
 
 	nflevg = getvar("NFLEVG",nd)
 	nfp3s = getvar("NFP3S",nd)
+	nt = length(ind)
+
+	cat("-->",nt,"FP events found\n")
 
 	resp = "(S\\d+)?(\\w+(\\.\\w+)*)"
 	indf = grep(sprintf("^ *%s *: %s$",resp,Gnum),nd)
-	indg = grep("^ *(FULL-POS +)?GPNORMS",nd)
-	indf = indf[indf > ind]
-	if (length(indg) > 0) indf = indf[indf < indg[length(indg)]]
+	indf = indf[indf > ind[1]]
 
 	ndfp = nd[indf]
 
 	noms = unique(sub(sprintf("^ *%s.+",resp),"\\2",ndfp))
 	i3d = grep("^ *S\\d+\\w+",ndfp)
 	noms3d = unique(sub("^ *S\\d+(\\w+(\\.\\w+)*).+","\\1",ndfp[i3d]))
+	fp3d = array(dim=c(nt,nfp3s,length(noms3d)),dimnames=list(1:nt,1:nfp3s,noms3d))
+	noms2d = noms[! noms %in% noms3d]
+	fp2d = array(dim=c(nt,length(noms2d)),dimnames=list(1:nt,noms2d))
 
-	ind = grep(sprintf("^ *%s *: %s$",resp,Gnum),ndfp)
-	fp3d = array(numlines(ndfp[ind]),dim=c(nfp3s,length(noms3d)),
-		dimnames=list(1:nfp3s,noms3d))
+	for (i in seq(along=ind)) {
+		ii = indf[indf >= ind[i]+1]
+		ind2 = which(diff(ii) > 2)
+		if (length(ind2) > 0) ii = ii[1:ind2[1]]
+
+		i3d = grep("^ *S\\d+\\w+",nd[ii])
+		if (length(i3d) == 0) next
+
+		for (j in seq(along=noms3d)) {
+			inds = grep(sprintf(" *S\\d+%s\\>.*? *:",noms3d[j]),nd[ii])
+			if (length(inds) < 3 && nflevg > 2) {
+				if (! quiet) cat("--> field",noms[j],"not 3D (maybe only top/bottom PP)\n")
+				next
+			}
+
+			stopifnot(length(inds) %in% c(nfp3s,nflevg))
+			fp = line2num(nd[ii[inds]])
+			re = sprintf(" *S0*(\\d+)%s\\>.* *:.+",noms3d[j])
+			levs = as.integer(sub(re,"\\1",nd[ii[inds]]))
+			fp3d[i,,j] = fp[order(levs)]
+			ii = ii[-inds]
+		}
+
+		if (length(ii) > 0) {
+			fp2d[i,] = sapply(strsplit(sub(".+: +","",nd[ii])," +"),as.numeric)
+		}
+	}
 
 	if (length(lev) > 1) {
 		stopifnot(all(lev %in% seq(nfp3s)))
-		fp = fp3d[lev,,drop=FALSE]
+		fp = fp3d[,lev,,drop=FALSE]
 	} else if (lev == 0) {
-		noms2d = noms[! noms %in% noms3d]
-		ind = grep(sprintf("^ *S\\d+\\w+",resp),ndfp,invert=TRUE)
-		fp2d = numlines(ndfp[ind])
-		names(fp2d) = noms2d
-		fp3m = apply(fp3d,2,mean)
-		fp = c(fp2d,fp3m)
+		fp3m = apply(fp3d,c(1,3),mean)
+		fp = cbind(fp2d,fp3m)
 	} else {
 		stopifnot(lev %in% seq(nfp3s))
-		fp = fp3d[lev,]
+		fp = fp3d[,lev,]
 	}
 
 	fp
@@ -685,13 +723,13 @@ countfield = function(ind,indg,nl2)
 
 	# indt: 1st and 2nd occurrences of GPNORM heading lines (ie steps 1 and 2)
 	if (length(indg) == 1) {
-		indt = ind[indg[1]:length(ind)]
+		indt = ind[indg:length(ind)]
 	} else {
 		indt = ind[seq(indg[1],indg[2])]
 	}
 
 	# find the 1st line among ind separated by nl2, if any
-	if (all(diff(indt) <= nl2)) return(length(ind))
+	if (all(diff(indt) <= nl2)) return(length(indt))
 
 	which(diff(indt) > nl2)[1]
 }
