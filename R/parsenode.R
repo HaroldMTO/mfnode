@@ -387,7 +387,7 @@ gpnorm2D = function(nd)
 	surf[sapply(surf,length) > 0]
 }
 
-fpgpnorm = function(nd,lev,tag,quiet=FALSE)
+fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
 {
 	ind = grep("^ *(FULL-POS +GPNORMS|GPNORMS +OF FIELDS)",nd)
 
@@ -396,7 +396,7 @@ fpgpnorm = function(nd,lev,tag,quiet=FALSE)
 		return(NULL)
 	}
 
-	if (! missing(tag)) {
+	if (! is.null(tag)) {
 		indg = grep(tag,nd[ind-2],ignore.case=TRUE)
 		indg = c(indg,grep(tag,nd[ind-1],ignore.case=TRUE))
 		ind = ind[indg]
@@ -408,7 +408,8 @@ fpgpnorm = function(nd,lev,tag,quiet=FALSE)
 		return(NULL)
 	}
 
-	cat("-->",length(fpstep),"FP events found\n")
+	nt = length(fpstep)
+	cat("-->",nt,"FP events found\n")
 
 	nflevg = getvar("NFLEVG",nd)
 	nfp3s = getvar("NFP3S",nd)
@@ -479,33 +480,37 @@ fpgpnorm = function(nd,lev,tag,quiet=FALSE)
 	indi = integer()
 
 	for (i in seq(along=fpl)) {
-		fp = fpl[[i]]
-		nlev = attr(fp,"nlev")
+		fpi = fpl[[i]]
+		nlev = attr(fpi,"nlev")
 		if (nlev == 1) {
-			nt = length(fp)%/%3
-			if (length(fp) != 3*nt) {
+			nti = length(fpi)%/%3
+			if (length(fpi) != 3*nti) {
 				if (! quiet) {
-					cat("--> truncated events for",names(fpl)[i],nt,length(fp)/3,"\n")
+					cat("--> truncated events for",names(fpl)[i],nti,length(fpi)/3,"\n")
 				}
 
 				indi = c(indi,i)
             next
          }
 
-			dim(fp) = c(3,nt)
-			fpl[[i]] = t(fp)
-			dimnames(fpl[[i]]) = list(seq(nt),c("ave","min","max"))
+			fp = array(dim=c(3,1,nt))
+			#fp = matrix(nrow=3,ncol=nt)
+			fp[,,seq(nti)] = fpi
+			fpl[[i]] = aperm(fp)
+			dimnames(fpl[[i]]) = list(seq(nt),1,c("ave","min","max"))
 		} else {
-			nt = length(fp)%/%(3*nlev)
-			if (length(fp) != 3*nlev*nt) {
+			nti = length(fpi)%/%(3*nlev)
+			if (length(fpi) != 3*nlev*nti) {
 				if (! quiet) {
-					cat("--> truncated events or levels for",names(fpl)[i],nt,length(fp)/3,"\n")
+					cat("--> truncated events or levels for",names(fpl)[i],nti,length(fpi)/3,"\n")
 				}
 
 				indi = c(indi,i)
 				next
 			}
 
+			fp = array(dim=c(3,nlev,nt))
+			fp[,,seq(nti)] = fpi
 			dim(fp) = c(3,nlev,nt)
 			fpl[[i]] = aperm(fp)
 			dimnames(fpl[[i]]) = list(seq(nt),seq(nlev),c("ave","min","max"))
@@ -521,7 +526,8 @@ fpgpnorm = function(nd,lev,tag,quiet=FALSE)
 	it = seq(along=fpstep)
 	lev = as.integer(lev)
 	if (identical(lev,0L)) {
-		fp = sapply(fpl,vmean,simplify="array")
+		#fp = sapply(fpl,vmean,it,simplify="array")
+		fp = sapply(fpl,function(x) apply(x,c(1,3),mean),simplify="array")
 	} else {
 		nlev = sapply(fpl,attr,"nlev")
 		nlevx = max(nlev)
