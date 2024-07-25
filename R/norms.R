@@ -9,7 +9,7 @@ digitsdiff = function(x,y)
 	ndiff
 }
 
-plotmean = function(x,y,main="Norm",legend,xunit,col,lty,scale=1,...)
+plotmean = function(x,y,legend,xunit,col,lty,scale=1,...)
 {
 	if (is.vector(y)) y = as.matrix(y)
 
@@ -20,7 +20,7 @@ plotmean = function(x,y,main="Norm",legend,xunit,col,lty,scale=1,...)
 	}
 
 	y = y*scale
-	matplot(x,y,type="l",lty=lty,col=col,main=main,...)
+	matplot(x,y,type="l",lty=lty,col=col,...)
 
 	if (! missing(legend)) legend("topleft",legend,col=col,lty=lty,bg="transparent")
 
@@ -63,13 +63,14 @@ plotmnx = function(x,y,main="GP Norm",imnx=1:3,col,lty=c(1,3,3),legend,ylim,...)
 	}
 }
 
-plotvmean = function(x,y,main="Norm",col=1,lty,ylab="Level",ylim=rev(range(y)),legend,...)
+plotvmean = function(x,y,type="l",main="Norm",col=1,lty,ylab="Level",ylim=rev(range(y)),
+	legend,...)
 {
 	if (is.vector(x)) x = as.matrix(x)
 	if (missing(lty)) lty = seq(dim(x)[2])
 
-	matplot(x,y,type="l",col=col,lty=lty,main=main,ylab=ylab,ylim=ylim,...)
-	abline(v=0,col="darkgrey",lty=2)
+	matplot(x,y,type,col=col,lty=lty,main=main,ylab=ylab,ylim=ylim,...)
+	abline(v=0,col="darkgrey",lty=1)
 
 	if (! missing(legend)) legend("topleft",legend,col=col,lty=lty,bg="transparent")
 }

@@ -188,7 +188,7 @@ spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 		dim(spn) = c(nt,length(lev),length(noms))
 	}
 
-	prestepo = tag == "NORMS AT (START|NSTEP|END) CNT4"
+	prestepo = regexpr("\\w",tag) < 0 || tag == "NORMS AT (START|NSTEP|END) CNT4"
 	spstep = stepindex(nd,ind,prestepo=TRUE)
 	if (! prestepo) {
 		spstepf = stepindex(nd,ind)
@@ -206,7 +206,7 @@ spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 	dimnames(spn) = list(spstep,lev,noms)
 
 	# account for STEPX
-	if (dim(spn)[1] > 1 && identical(all.equal(spn[1,,],spn[2,,]),TRUE)) {
+	if (dim(spn)[1] > 1 && isTRUE(all.equal(spn[1,,],spn[2,,]))) {
 		cat("--> duplicated 1st step (ie STEPX), remove it\n")
 		spn = spn[-1,,,drop=FALSE]
 	}
@@ -253,6 +253,9 @@ gpnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 			indi = ind-up-4
 			indg = grep(tag,nd[indi[indi > 0]],ignore.case=TRUE)
 		}
+	} else if (! nzchar(tag) || regexpr("\\w",tag) < 0) {
+		nom1 = sub(" *GPNORM +(\\w+.+?) +AVERAGE.+","\\1",nd[ind[1]])
+		indg = which(sub(" *GPNORM +(\\w+.+?) +AVERAGE.+","\\1",nd[ind]) == nom1)
 	} else {
 		indg = grep(tag,nd[ind-1],ignore.case=TRUE)
 	}
@@ -312,7 +315,7 @@ gpnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	dimnames(gpn) = list(gpstep,lev,c("ave","min","max"),noms)
 
 	# account for STEPX
-	if (dim(gpn)[1] > 1 && identical(all.equal(gpn[1,,,],gpn[2,,,]),TRUE)) {
+	if (dim(gpn)[1] > 1 && isTRUE(all.equal(gpn[1,,,],gpn[2,,,]))) {
 		cat("--> duplicated 1st step (ie STEPX), remove it\n")
 		gpn = gpn[-1,,,,drop=FALSE]
 	}
@@ -387,7 +390,7 @@ gpnorm2D = function(nd)
 	surf[sapply(surf,length) > 0]
 }
 
-fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
+fpgpnorm = function(nd,lev,tag="",invert=FALSE,quiet=FALSE)
 {
 	ind = grep("^ *(FULL-POS +GPNORMS|GPNORMS +OF FIELDS)",nd)
 
@@ -396,9 +399,9 @@ fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
 		return(NULL)
 	}
 
-	if (! is.null(tag)) {
-		indg = grep(tag,nd[ind-2],ignore.case=TRUE)
-		indg = c(indg,grep(tag,nd[ind-1],ignore.case=TRUE))
+	if (nzchar(tag)) {
+		indg = grep(tag,nd[ind-1],ignore.case=TRUE,invert=invert)
+		if (! invert) indg = c(indg,grep(tag,nd[ind-2],ignore.case=TRUE))
 		ind = ind[indg]
 	}
 
@@ -408,11 +411,23 @@ fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
 		return(NULL)
 	}
 
+	if (tag == "") {
+		nstop = getvar("NSTOP",nd)
+		if (length(fpstep)%/%2 > nstop) {
+			cat("--> possibly split FP events\n")
+			length(fpstep) = length(fpstep)%/%2
+		}
+	}
+
 	nt = length(fpstep)
 	cat("-->",nt,"FP events found\n")
 
 	nflevg = getvar("NFLEVG",nd)
 	nfp3s = getvar("NFP3S",nd)
+	if (is.null(nfp3s)) nfp3s = nflevg
+
+	if (quiet) cat = function(...) return(NULL)
+
 	indf = grep("^ *(\\w+|[. '/])+\\w+ *: +[+-]?\\d*\\.\\d+",nd)
 	#indf = grep(sprintf("^ *(\\w+|[. '/])+\\w+ *:( +%s){1,3}$",Gnum),nd)
 	for (i in seq(along=ind)) {
@@ -433,7 +448,7 @@ fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
 			for (j in seq(along=noms)) {
 				inds = grep(sprintf(" *S\\d+%s\\>.*? *:",noms[j]),nd[ii])
 				if (length(inds) < 3 && nflevg > 2) {
-					if (! quiet) cat("--> field",noms[j],"not 3D (maybe only top/bottom PP)\n")
+					cat("--> field",noms[j],"not 3D (maybe only top/bottom PP)\n")
 					next
 				}
 
@@ -473,8 +488,10 @@ fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
 		}
 
 		iv = names(gpl) %in% names(fpl)
-		if (! quiet && any(! iv)) cat("adding fields:",names(gpl)[! iv],"\n")
-		if (any(! iv)) fpl = c(fpl,gpl[! iv])
+		if (any(! iv)) {
+			cat("adding fields:",names(gpl)[! iv],"\n")
+			fpl = c(fpl,gpl[! iv])
+		}
 	}
 
 	indi = integer()
@@ -485,32 +502,27 @@ fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
 		if (nlev == 1) {
 			nti = length(fpi)%/%3
 			if (length(fpi) != 3*nti) {
-				if (! quiet) {
-					cat("--> truncated events for",names(fpl)[i],nti,length(fpi)/3,"\n")
-				}
-
+				cat("--> truncated events for",names(fpl)[i],nti,length(fpi)/3,"\n")
 				indi = c(indi,i)
             next
          }
 
 			fp = array(dim=c(3,1,nt))
-			#fp = matrix(nrow=3,ncol=nt)
-			fp[,,seq(nti)] = fpi
+			nti = min(nti,nt)
+			fp[,,seq(nti)] = fpi[seq(3*nti)]
 			fpl[[i]] = aperm(fp)
 			dimnames(fpl[[i]]) = list(seq(nt),1,c("ave","min","max"))
 		} else {
 			nti = length(fpi)%/%(3*nlev)
 			if (length(fpi) != 3*nlev*nti) {
-				if (! quiet) {
-					cat("--> truncated events or levels for",names(fpl)[i],nti,length(fpi)/3,"\n")
-				}
-
+				cat("--> truncated events or levels for",names(fpl)[i],nti,length(fpi)/3,"\n")
 				indi = c(indi,i)
 				next
 			}
 
 			fp = array(dim=c(3,nlev,nt))
-			fp[,,seq(nti)] = fpi
+			nti = min(nti,nt)
+			fp[,,seq(nti)] = fpi[seq(3*nlev*nti)]
 			dim(fp) = c(3,nlev,nt)
 			fpl[[i]] = aperm(fp)
 			dimnames(fpl[[i]]) = list(seq(nt),seq(nlev),c("ave","min","max"))
@@ -526,15 +538,16 @@ fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
 	it = seq(along=fpstep)
 	lev = as.integer(lev)
 	if (identical(lev,0L)) {
-		#fp = sapply(fpl,vmean,it,simplify="array")
 		fp = sapply(fpl,function(x) apply(x,c(1,3),mean),simplify="array")
 	} else {
+		# nlev: either 1, nfp3s or nflevg do not use nfp3s or nflevg
 		nlev = sapply(fpl,attr,"nlev")
-		nlevx = max(nlev)
-		stopifnot(all(lev %in% seq(nlevx)))
-		fp3 = fpl[nlev == nlevx]
+		fp3 = fpl[nlev == nfp3s]
+		if (length(fp3) == 0) fp3 = fpl[nlev == nflevg]
 		if (length(fp3) == 0) return(NULL)
 
+		# there are 3D, so max(nlev) is either nfp3s or nflevg but not 1
+		stopifnot(all(lev %in% seq(max(nlev))))
 		fp = sapply(fp3,function(x) x[it,lev,,drop=FALSE],simplify="array")
 	}
 
@@ -556,16 +569,7 @@ fpgpnorm = function(nd,lev,tag=NULL,quiet=FALSE)
 	fp
 }
 
-vmean = function(x,it)
-{
-	if (attr(x,"nlev") == 1) {
-		x[it,,drop=FALSE]
-	} else {
-		apply(x[it,,,drop=FALSE],c(1,3),mean)
-	}
-}
-
-fpspnorm = function(nd,lev)
+fpspnorm = function(nd,lev,tag="")
 {
 	ind = grep("^ *(FULL-POS +)?SPNORMS",nd)
 
@@ -574,11 +578,22 @@ fpspnorm = function(nd,lev)
 		return(NULL)
 	}
 
+	if (nzchar(tag)) {
+		indg = grep(tag,nd[ind-1],ignore.case=TRUE)
+		ind = ind[indg]
+	}
+
+	fpstep = unique(stepindex(nd,ind))
+	if (length(fpstep) == 0) {
+		cat("--> no FP norms found\n")
+		return(NULL)
+	}
+
+	nt = length(fpstep)
+	cat("-->",nt,"FP events found\n")
+
 	nflevg = getvar("NFLEVG",nd)
 	nfp3s = getvar("NFP3S",nd)
-	nt = length(ind)
-
-	cat("-->",nt,"FP events found\n")
 
 	resp = "(S\\d+)?(\\w+(\\.\\w+)*)"
 	indf = grep(sprintf("^ *%s *: %s$",resp,Gnum),nd)
@@ -589,9 +604,9 @@ fpspnorm = function(nd,lev)
 	noms = unique(sub(sprintf("^ *%s.+",resp),"\\2",ndfp))
 	i3d = grep("^ *S\\d+\\w+",ndfp)
 	noms3d = unique(sub("^ *S\\d+(\\w+(\\.\\w+)*).+","\\1",ndfp[i3d]))
-	fp3d = array(dim=c(nt,nfp3s,length(noms3d)),dimnames=list(1:nt,1:nfp3s,noms3d))
+	fp3d = array(dim=c(nt,nfp3s,length(noms3d)),dimnames=list(fpstep,1:nfp3s,noms3d))
 	noms2d = noms[! noms %in% noms3d]
-	fp2d = array(dim=c(nt,length(noms2d)),dimnames=list(1:nt,noms2d))
+	fp2d = array(dim=c(nt,length(noms2d)),dimnames=list(fpstep,noms2d))
 
 	for (i in seq(along=ind)) {
 		ii = indf[indf >= ind[i]+1]
@@ -640,7 +655,7 @@ stepindex = function(nd,ind,prestepo=FALSE)
 	icnt4 = grep("START CNT4",nd)
 	if (length(icnt4) == 0) {
 		warning("no line matching 'START CNT4'")
-		return(ind)
+		return(seq(along=ind)-1)
 	}
 
 	if (prestepo) {
@@ -649,8 +664,8 @@ stepindex = function(nd,ind,prestepo=FALSE)
 			"\\1\\4\\5",nd[indt])
 		ix = grep("^ *NORMS AT (START|END) CNT4",nd[indt])
 		nstep[ix] = sub(" *NORMS AT (START|END) CNT4(TL|AD)?.*","\\2\\1",nd[indt[ix]])
-		if (length(ix) > 0) {
-			inds = grep("^ *START CNT4(TL|AD)",nd)
+		inds = grep("^ *START CNT4(TL|AD)",nd)
+		if (length(ix) > 0 && length(inds) > 0) {
 			ixs = sapply(ix,function(i) rev(which(inds < indt[i]))[1])
 			nsim = sub("^ *START CNT4(TL|AD), +NSIM4D *= *(\\d+).*","\\2",nd[inds[ixs]])
 			nstep[ix] = paste(nstep[ix],nsim,sep="")
@@ -775,48 +790,47 @@ shortnames = function(x)
 	x
 }
 
-varqc = function(nd)
+abh = function(nd,nflevg)
 {
-	indo = grep("^ *VAR *= *\\d+",nd)
-	iv = as.integer(sub("VAR *= *(\\d+).+","\\1",nd[indo]))
-	qc = vector(length(unique(iv)),mode="list")
-	for (i in iv) {
-		ind = which(iv == i)
-		notvar = intlines(sub(".+ NOTVAR *=","",nd[indo[ind[1]]]))
-		v = numlines(gsub("\\*+","-9999.",nd[indo[ind[-1]]]))
-		v[v==-9999] = NA
-		qc[[i]] = matrix(c(v,notvar),nc=length(ind))
+	ih = grep("A and B (at half levels|on half layers)",nd)
+	ind = ih+1+seq(nflevg+1)
+	snum = "-?\\d+\\.\\d+"
+	if (regexpr("JLEV +A +B +ETA +ALPHA",nd[ih+1]) > 0) {
+		re = sprintf(" *\\d+ +(%s) +(%s) +(%s) +(%s)",snum,snum,snum,snum)
+		ire = regexec(re,nd[ind])
+		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
+		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+	} else {
+		ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[ind])
+		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
 	}
 
-	qc
+	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
+	data.frame(Ah=ah,Bh=bh,alpha=alh)
 }
 
-jotable = function(nd)
+abhfp = function(nd,nfplev)
 {
-	iobst = grep("Obstype +\\d+ +=+",nd,ignore.case=TRUE)
-	ijog = grep("Jo Global",nd)
-	ndo = nd[iobst[1]:ijog[1]]
-	ijoh = grep("Codetype +\\d+ +=+",ndo)
-	ijot = grep("^ +\\w+ +\\d+( +\\d+\\.\\d+){3}",ndo)
-	lj = strsplit(ndo[ijot],split=" +")
-	jot = t(sapply(lj,function(x) as.numeric(x[3:6])))
-	jot = as.data.frame(jot)
-	names(jot) = c("DataCount","Jo_Costfunction","Jo/n","ObsErr")
-	vars = sapply(lj,"[",2)
+	ih = grep("Set up F-post processing, vertical geometry",nd)
+	ind = grep("FPVALH.+FPVBH",nd)
+	ind = ind[ind > ih]
+	stopifnot(length(ind) == nfplev+1)
 
-	indi = findInterval(ijot,ijoh)
-	code = sub(" +Codetype +(\\d+) +.+","\\1",ndo[ijoh[indi]])
-
-	jot = cbind(Codetype=as.integer(code),Variable=vars,jot)
-
-	jot
+	snum = "-?\\d+\\.\\d+"
+	ire = regexec(sprintf(" *FPVALH\\(( *\\d+|\\*)+\\) *= *(%s) +FPVBH\\(( *\\d+|\\*+)\\) *= *(%s)",
+		snum,snum),nd[ind])
+	ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
+	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
+	data.frame(Ah=ah,Bh=bh)
 }
 
 runtime = function(nd)
 {
-   indw = grep("STEP +\\d+ +H=.+\\+CPU=",nd)
-   walls = as.difftime(gsub("^ *([[:digit:]:]+) .+","\\1",nd[indw]),units="secs")
-   cpus = as.difftime(as.numeric(gsub(".+\\+CPU= *","",nd[indw])),units="secs")
+	indw = grep("STEP +\\d+ +H=.+\\+CPU=",nd)
+	if (length(indw) == 0) return(NULL)
+
+	walls = as.difftime(gsub("^ *([[:digit:]:]+) .+","\\1",nd[indw]),units="secs")
 
 	dwalls = diff(walls)
 
@@ -837,7 +851,11 @@ runtime = function(nd)
 		i1 = i+1
 	}
 
-	rt = data.frame(wall=walls,dwall=c(0,dwalls),cpu=cpus)
+	rt = data.frame(wall=walls,dwall=c(0,dwalls))
+	if (length(indw) > 1) {
+		cpus = as.difftime(as.numeric(gsub(".+\\+CPU= *","",nd[indw])),units="secs")
+		rt = cbind(rt,cpu=cpus)
+	}
 
 	i1 = grep("TIME OF START *=",nd)
 	attr(rt,"start") = as.difftime(gsub("^ *TIME OF START *= *","",nd[i1]),units="secs")
