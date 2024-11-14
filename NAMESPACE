@@ -1,5 +1,5 @@
 export(Gint,Gndigits,Gnum,gpfre)
 
 export(abh,abhfp,diagstep,digitsdiff,fclines,fpgpnorm,fpspnorm,getvar,gpnorm,gpnorm2D,
-	intlines,line2num,numlines,plotmean,plotmnx,plotvmean,plotvmnx,
-	runtime,shortnames,spnorm,stepindex,sulines)
+	intlines,line2num,numlines,plotmean,plotmnx,plotvmean,plotvmnx,runtime,scale10,
+	shortnames,spnorm,stepindex,sulines)

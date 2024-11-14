@@ -9,7 +9,21 @@ digitsdiff = function(x,y)
 	ndiff
 }
 
-plotmean = function(x,y,legend,xunit,col,lty,scale=1,...)
+scale10 = function(x,scientific=TRUE)
+{
+	xmax = max(abs(x),na.rm=TRUE)
+	if (length(xmax) == 0 || xmax == 0) return(1)
+
+	xlog = log10(xmax/1.5)
+
+	if (scientific) {
+		10^(3*round(xlog/3))
+	} else {
+		10^round(xlog)
+	}
+}
+
+plotmean = function(x,y,legend,xunit,col,lty,scale=1,ylab,...)
 {
 	if (is.vector(y)) y = as.matrix(y)
 
@@ -19,8 +33,12 @@ plotmean = function(x,y,legend,xunit,col,lty,scale=1,...)
 		lty[-1] = 2
 	}
 
-	y = y*scale
-	matplot(x,y,type="l",lty=lty,col=col,...)
+	if (scale != 1) {
+		y = y*scale
+		ylab = sprintf("%s, scaling: *%.4g",ylab,scale)
+	}
+
+	matplot(x,y,type="l",lty=lty,col=col,ylab=ylab,...)
 
 	if (! missing(legend)) legend("topleft",legend,col=col,lty=lty,bg="transparent")
 
@@ -35,7 +53,6 @@ plotmean = function(x,y,legend,xunit,col,lty,scale=1,...)
 		tend = coef(reg)[2]*86400/xunit
 		tt = sprintf("Tend: %+.3e [unit]/day",tend)
 		if (xunit == 86400) tt = sprintf("%s, variation: %.2g",tt,tend*diff(range(x)))
-		if (scale != 1) tt = sprintf("%s, scaling: *%.0e",tt,scale)
 
 		mtext(tt,cex=par("cex"))
 	}

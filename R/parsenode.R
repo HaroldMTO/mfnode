@@ -109,12 +109,17 @@ normtags = function(nd,type)
 		ndgp = grep("^ *gpnorm +",nd,ignore.case=TRUE,value=TRUE)
 		ndgp = grep("AVERAGE +MIN(IMUM)? +MAX",ndgp,invert=TRUE,value=TRUE)
 		if (length(ndgp) > 0) tags = c(tags,unique(sort(ndgp)))
+	} else if (type == "FP") {
+		ndsp = grep("^ *(FULL-POS +)?SPNORMS",nd,value=TRUE)
+		if (length(ndsp) > 0) tags = c(tags,unique(sort(ndsp)))
+		ndgp = grep("^ *(FULL-POS +GPNORMS|GPNORMS +OF FIELDS)",nd,value=TRUE)
+		if (length(ndgp) > 0) tags = c(tags,unique(sort(ndgp)))
 	}
 
 	tags
 }
 
-spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
+spnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 {
 	lev = as.integer(lev)
 
@@ -194,7 +199,7 @@ spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 		spstepf = stepindex(nd,ind)
 		ist = (is.na(spstep) | duplicated(spstep) | regexpr("^X",spstepf) > 0) &
 			! is.na(spstepf)
-		if (any(ist)) sptep[ist] = spstepf[ist]
+		if (any(ist)) spstep[ist] = spstepf[ist]
 	}
 
 	if (abbrev) {
@@ -214,7 +219,7 @@ spnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 	spn
 }
 
-gpnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
+gpnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	gpout=character(),abbrev=TRUE)
 {
 	lev = as.integer(lev)
@@ -290,6 +295,7 @@ gpnorm = function(nd,lev,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	indi = rep(indh,each=length(lev))+lev+1
 
 	gpn = line2num(nd[indi])
+	if (dim(gpn)[1] == 4) gpn = gpn[1:3,,drop=FALSE]
 
 	nval = 3*length(lev)*length(noms)
 	nt = length(gpn)%/%nval
@@ -671,8 +677,8 @@ stepindex = function(nd,ind,prestepo=FALSE)
 			nstep[ix] = paste(nstep[ix],nsim,sep="")
 		}
 	} else {
-		indt = grep("^ *NSTEP = *\\d+ +STEP[OX](TL|AD)? +",nd)
-		nstep = sub("^ *NSTEP = *(\\d+) +STEP(O|(X))(TL|AD)? +.*","\\3\\4\\1",nd[indt])
+		indt = grep("^ *NSTEP *= *\\d+ +STEP[OX](TL|AD)? +",nd)
+		nstep = sub("^ *NSTEP *= *(\\d+) +STEP(O|(X))(TL|AD)? +.*","\\3\\4\\1",nd[indt])
 	}
 
 	jstep = rep(NA_character_,length(ind))
