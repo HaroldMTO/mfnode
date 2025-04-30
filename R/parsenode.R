@@ -295,7 +295,11 @@ gpnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	indi = rep(indh,each=length(lev))+lev+1
 
 	gpn = line2num(nd[indi])
-	if (dim(gpn)[1] == 4) gpn = gpn[1:3,,drop=FALSE]
+	if (is.list(gpn) && any(sapply(gpn,length) == 4)) {
+		gpn = sapply(gpn,"[",1:3)
+	} else if (dim(gpn)[1] == 4) {
+		gpn = gpn[1:3,,drop=FALSE]
+	}
 
 	nval = 3*length(lev)*length(noms)
 	nt = length(gpn)%/%nval
@@ -430,7 +434,7 @@ fpgpnorm = function(nd,lev,tag="",invert=FALSE,quiet=FALSE)
 
 	nflevg = getvar("NFLEVG",nd)
 	nfp3s = getvar("NFP3S",nd)
-	if (is.null(nfp3s)) nfp3s = nflevg
+	if (is.null(nfp3s) || nfp3s == 0) nfp3s = nflevg
 
 	if (quiet) cat = function(...) return(NULL)
 
@@ -458,7 +462,8 @@ fpgpnorm = function(nd,lev,tag="",invert=FALSE,quiet=FALSE)
 					next
 				}
 
-				stopifnot(length(inds) %in% c(nfp3s,nflevg))
+				if (! length(inds) %in% c(nfp3s,nflevg)) next
+
 				fp = line2num(nd[ii[inds]])
 				re = sprintf(" *S0*(\\d+)%s\\>.* *:.+",noms[j])
 				levs = as.integer(sub(re,"\\1",nd[ii[inds]]))
@@ -495,7 +500,7 @@ fpgpnorm = function(nd,lev,tag="",invert=FALSE,quiet=FALSE)
 
 		iv = names(gpl) %in% names(fpl)
 		if (any(! iv)) {
-			cat("adding fields:",names(gpl)[! iv],"\n")
+			#cat("adding fields:",names(gpl)[! iv],"\n")
 			fpl = c(fpl,gpl[! iv])
 		}
 	}
