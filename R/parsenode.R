@@ -66,12 +66,15 @@ initlines = function(nd,TLAD.ok=TRUE,strict=FALSE)
 
 fclines = function(nd,TLAD.ok=TRUE,strict=FALSE)
 {
+	# bit optimised (for large NODE files)
 	if (TLAD.ok) {
-		icnt4 = grep("^ *START +CNT4(TL|AD)?",nd)
-		icnt3 = grep("END +CNT3(TL|AD)?",nd)
+		icnt = grep("\\<END OF SETUPS\\>|^ *START +CNT4(TL|AD)?|END +CNT3(TL|AD)?",nd)
+		icnt3 = grep("END +CNT3(TL|AD)?",nd[icnt])
+		icnt4 = grep("^ *START +CNT4(TL|AD)?",nd[icnt])
 	} else {
-		icnt4 = grep("^ *START +CNT4\\>",nd)
-		icnt3 = grep("END +CNT3\\>",nd)
+		icnt = grep("\\<END OF SETUPS\\>|^ *START +CNT4\\>|END +CNT3\\>",nd)
+		icnt3 = grep("END +CNT3\\>",nd[icnt])
+		icnt4 = grep("^ *START +CNT4\\>",nd[icnt])
 	}
 
 	if (strict) {
@@ -79,12 +82,29 @@ fclines = function(nd,TLAD.ok=TRUE,strict=FALSE)
 		if (length(icnt3) == 0) stop("no line matching 'END CNT3'")
 	}
 
-	if (length(icnt4) == 0) icnt4 = 1
-	if (length(icnt3) == 0) icnt3 = length(nd)
+	if (length(icnt4) == 0) {
+		icnt4 = 1
+	} else {
+		icnt4 = icnt[icnt4]
+	}
+
+	if (length(icnt3) == 0) {
+		icnt3 = length(nd)
+	} else {
+		icnt3 = icnt[icnt3]
+	}
+
 	ndfc = nd[icnt4[1]:icnt3[length(icnt3)]]
 
 	# filter out empty lines (important for conceptual search of norm heading lines)
-	grep("^ *$",ndfc,invert=TRUE,value=TRUE)
+	ndfc = grep("^ *$",ndfc,invert=TRUE,value=TRUE)
+
+	# replace sulines (for optimisation)
+	icnt0 = grep("\\<END OF SETUPS\\>",nd)
+	if (length(icnt0) == 0) icnt0 = icnt4[1]
+	attr(ndfc,"setup") = nd[seq(icnt0)]
+
+	ndfc
 }
 
 checklev = function(lev,has.levels,nflevg)
@@ -123,13 +143,13 @@ spnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 {
 	lev = as.integer(lev)
 
-	ndsu = sulines(nd)
+	# exclude lines before CNT4 (avoid norms for DFI)
+	nd = fclines(nd)
+
+	ndsu = attr(nd,"setup")
 	has.levels = getvar("NSPPR",ndsu) > 0
 	nflevg = getvar("NFLEVG",ndsu)
 	checklev(lev,has.levels,nflevg)
-
-	# exclude lines before CNT4 (avoid norms for DFI)
-	nd = fclines(nd)
 
 	ind = grep("SPECTRAL NORMS",nd)
 
@@ -224,14 +244,13 @@ gpnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 {
 	lev = as.integer(lev)
 
-	# limit lines (for performance)
-	ndsu = sulines(nd)
+	# exclude lines before CNT4 (avoid norms for DFI)
+	nd = fclines(nd)
+
+	ndsu = attr(nd,"setup")
 	has.levels = getvar("NSPPR",ndsu) > 0
 	nflevg = getvar("NFLEVG",ndsu)
 	checklev(lev,has.levels,nflevg)
-
-	# exclude lines before CNT4 (avoid norms for DFI)
-	nd = fclines(nd)
 
 	ind = grep(sprintf("GPNORM +(%s) +AVERAGE",gpin),nd)
 	gpout = paste(c(gpout,"OUTPUT"),collapse="|")
@@ -295,7 +314,7 @@ gpnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	indi = rep(indh,each=length(lev))+lev+1
 
 	gpn = line2num(nd[indi])
-	if (is.list(gpn) && any(sapply(gpn,length) == 4)) {
+	if (is.list(gpn) && any(sapply(gpn,length) >= 3)) {
 		gpn = sapply(gpn,"[",1:3)
 	} else if (dim(gpn)[1] == 4) {
 		gpn = gpn[1:3,,drop=FALSE]
@@ -801,9 +820,10 @@ shortnames = function(x)
 	x
 }
 
-abh = function(nd,nflevg)
+abh = function(nd,nflevg,vp00)
 {
 	ih = grep("A and B (at half levels|on half layers)",nd)
+	if (length(ih) > 1) ih = ih[1]
 	ind = ih+1+seq(nflevg+1)
 	snum = "-?\\d+\\.\\d+"
 	if (regexpr("JLEV +A +B +ETA +ALPHA",nd[ih+1]) > 0) {
@@ -812,20 +832,34 @@ abh = function(nd,nflevg)
 		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
 		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
 	} else {
-		ire = regexec(sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum),nd[ind])
+		re = sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum)
+		ire = regexec(re,nd[ind])
 		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
 		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
 	}
 
 	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
-	data.frame(Ah=ah,Bh=bh,alpha=alh)
+
+	ih = grep("ETA at half/full levels",nd)
+	ind = ih+1+seq(nflevg+1)
+	re = sprintf(" *\\d+ +(%s) +(%s)",snum,snum)
+	ire = regexec(re,nd[ind])
+	etah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+	eta = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
+
+	if (missing(vp00)) vp00 = getvar("VP00",nd)
+	stopifnot(all.equal(ah/vp00+bh,etah))
+
+	data.frame(Ah=ah,Bh=bh,alpha=alh,etah=etah,eta=eta)
 }
 
-abhfp = function(nd,nfplev)
+abhfp = function(nd,nfplev,vp00)
 {
 	ih = grep("Set up F-post processing, vertical geometry",nd)
+	if (length(ih) == 0) ih = grep("Set up F-post processing",nd)
 	ind = grep("FPVALH.+FPVBH",nd)
 	ind = ind[ind > ih]
+	if (length(ind) > nfplev+1) ind = ind[1:(nfplev+1)]
 	stopifnot(length(ind) == nfplev+1)
 
 	snum = "-?\\d+\\.\\d+"
@@ -833,7 +867,10 @@ abhfp = function(nd,nfplev)
 		snum,snum),nd[ind])
 	ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
 	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
-	data.frame(Ah=ah,Bh=bh)
+
+	if (missing(vp00)) vp00 = getvar("VP00",nd)
+	etah = ah/vp00+bh
+	data.frame(Ah=ah,Bh=bh,etah=etah)
 }
 
 runtime = function(nd)
@@ -864,12 +901,29 @@ runtime = function(nd)
 
 	rt = data.frame(wall=walls,dwall=c(0,dwalls))
 	if (length(indw) > 1) {
-		cpus = as.difftime(as.numeric(gsub(".+\\+CPU= *","",nd[indw])),units="secs")
+		re = sprintf(".+\\+CPU= *%s( +.+)?",Gnum)
+		cpus = as.difftime(as.numeric(gsub(re,"\\1",nd[indw])),units="secs")
 		rt = cbind(rt,cpu=cpus)
 	}
 
-	i1 = grep("TIME OF START *=",nd)
-	attr(rt,"start") = as.difftime(gsub("^ *TIME OF START *= *","",nd[i1]),units="secs")
+	inds = grep("NRADFR|TSTEP|TIME OF START *=",nd)
+	nradfr = getvar("NRADFR",nd[inds])
+	if (! is.null(nradfr) && nradfr > 0) {
+		nts = dim(rt)[1]
+		attr(rt,"tsrad") = seq(1,nts,by=nradfr)
+	}
+
+	tstep = getvar("TSTEP",nd[inds])
+	if (! is.null(tstep) && tstep > 0) {
+		freqh = 3600/tstep
+		if (as.integer(freqh) != freqh) freqh = 3*3600/tstep
+		if (as.integer(freqh) != freqh) freqh = 6*3600/tstep
+		if (as.integer(freqh) == freqh) attr(rt,"tshours") = seq(1,dim(rt)[1],by=freqh)
+	}
+
+	i1 = grep("TIME OF START *=",nd[inds])
+	attr(rt,"start-time") = gsub("^ *TIME OF START *= *([^.]+).*","\\1",nd[inds[i1]])
+	attr(rt,"start") = as.difftime(attr(rt,"start-time"),units="secs")
 
 	rt
 }

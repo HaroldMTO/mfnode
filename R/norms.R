@@ -40,6 +40,13 @@ plotmean = function(x,y,legend,xunit,col,lty,scale=1,ylab,...)
 
 	matplot(x,y,type="l",lty=lty,col=col,ylab=ylab,...)
 
+	for (i in seq(dim(y)[2])[-1]) {
+		ina = which(is.na(y[,i]))
+		if (length(ina) > 0 && length(ina) < dim(y)[1]-1) {
+			lines(x[-ina],y[-ina,i],lty=lty[i],col=col[i])
+		}
+	}
+
 	if (! missing(legend)) legend("topleft",legend,col=col,lty=lty,bg="transparent")
 
 	if (all(y == 0,na.rm=TRUE)) {
@@ -74,9 +81,10 @@ plotmnx = function(x,y,main="GP Norm",imnx=1:3,col,lty=c(1,3,3),legend,ylim,...)
 	if (! missing(legend)) legend("topleft",legend,col=col,lty=1,bg="transparent")
 
 	for (k in seq(dim(y)[3])[-1]) {
-		if (all(is.na(y[,imnx,k]))) next
+		ina = which(is.na(y[,imnx[1],k]))
+		if (length(ina) == 0 || length(ina) >= dim(y)[1]-1) next
 
-		matlines(x,y[,imnx,k],lty=lty[imnx],col=col[k])
+		matlines(x[-ina],y[-ina,imnx,k],lty=lty[imnx],col=col[k])
 	}
 }
 
