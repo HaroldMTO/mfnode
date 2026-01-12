@@ -213,12 +213,13 @@ spnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 		dim(spn) = c(nt,length(lev),length(noms))
 	}
 
-	prestepo = regexpr("\\w",tag) < 0 || tag == "NORMS AT (START|NSTEP|END) CNT4"
 	spstep = stepindex(nd,ind,prestepo=TRUE)
-	if (! prestepo) {
+
+	prestepo = regexpr("\\w",tag) < 0 || regexpr("NORMS AT .+ CNT4",tag) > 0
+	ist = is.na(spstep) | duplicated(spstep) | regexpr("^X",spstep) > 0
+	if (! prestepo && any(ist)) {
 		spstepf = stepindex(nd,ind)
-		ist = (is.na(spstep) | duplicated(spstep) | regexpr("^X",spstepf) > 0) &
-			! is.na(spstepf)
+		ist = (ist | regexpr("^X",spstepf) > 0) & ! is.na(spstepf)
 		if (any(ist)) spstep[ist] = spstepf[ist]
 	}
 
@@ -231,9 +232,11 @@ spnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",abbrev=TRUE)
 	dimnames(spn) = list(spstep,lev,noms)
 
 	# account for STEPX
-	if (dim(spn)[1] > 1 && isTRUE(all.equal(spn[1,,],spn[2,,]))) {
-		cat("--> duplicated 1st step (ie STEPX), remove it\n")
-		spn = spn[-1,,,drop=FALSE]
+	if (any(duplicated(spstep))) {
+		if (dim(spn)[1] > 1 && isTRUE(all.equal(spn[1,,],spn[2,,]))) {
+			cat("--> duplicated 1st step (ie STEPX), remove it\n")
+			spn = spn[-1,,,drop=FALSE]
+		}
 	}
 
 	spn
@@ -331,12 +334,14 @@ gpnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	dim(gpn) = c(3,length(lev),length(noms),nt)
 	gpn = aperm(gpn,c(4,2,1,3))
 
-	prestepo = tag == "NORMS AT (START|NSTEP|END) CNT4"
 	gpstep = stepindex(nd,ind[indg],prestepo=TRUE)
-	if (! prestepo) {
+
+	prestepo = regexpr("\\w",tag) < 0 || regexpr("NORMS AT .+ CNT4",tag) > 0
+	ist = is.na(gpstep) | duplicated(gpstep) | regexpr("^X",gpstep) > 0
+
+	if (! prestepo && any(ist)) {
 		gpstepf = stepindex(nd,ind[indg])
-		ist = (is.na(gpstep) | duplicated(gpstep) | regexpr("^X",gpstepf) > 0) &
-			! is.na(gpstepf)
+		ist = (ist | regexpr("^X",gpstepf) > 0) & ! is.na(gpstepf)
 		if (any(ist)) gpstep[ist] = gpstepf[ist]
 	}
 
@@ -344,9 +349,11 @@ gpnorm = function(nd,lev=0,tag="NORMS AT (START|NSTEP|END) CNT4",gpin="\\w+.*",
 	dimnames(gpn) = list(gpstep,lev,c("ave","min","max"),noms)
 
 	# account for STEPX
-	if (dim(gpn)[1] > 1 && isTRUE(all.equal(gpn[1,,,],gpn[2,,,]))) {
-		cat("--> duplicated 1st step (ie STEPX), remove it\n")
-		gpn = gpn[-1,,,,drop=FALSE]
+	if (any(duplicated(gpstep))) {
+		if (dim(gpn)[1] > 1 && isTRUE(all.equal(gpn[1,,,],gpn[2,,,]))) {
+			cat("--> duplicated 1st step (ie STEPX), remove it\n")
+			gpn = gpn[-1,,,,drop=FALSE]
+		}
 	}
 
 	gpn
@@ -692,6 +699,18 @@ stepindex = function(nd,ind,prestepo=FALSE)
 		indt = grep("^ *NORMS AT (START|NSTEP|END) CNT4(TL|AD)?",nd)
 		nstep = sub(" *NORMS AT NSTEP CNT4(TL|AD)?( \\((PREDICTOR|(C)ORRECTOR)\\))? +(\\d+)",
 			"\\1\\4\\5",nd[indt])
+		ic = which(nstep == "C0")
+		if (length(ic) == 1) {
+			indp = which(regexpr("^C\\d+",nstep) < 0)
+			indp = indp[indp < length(nstep)]
+			nstep[indp+1] = sprintf("%s_C1",nstep[indp])
+		}
+
+		ic = which(nstep == "C1")
+		if (length(ic) > 1) nstep[ic] = sprintf("%s_C1",nstep[ic-1])
+		ic = which(nstep == "C2")
+		if (length(ic) > 1) nstep[ic] = sprintf("%s_C2",nstep[ic-2])
+
 		ix = grep("^ *NORMS AT (START|END) CNT4",nd[indt])
 		nstep[ix] = sub(" *NORMS AT (START|END) CNT4(TL|AD)?.*","\\2\\1",nd[indt[ix]])
 		inds = grep("^ *START CNT4(TL|AD)",nd)
@@ -700,19 +719,22 @@ stepindex = function(nd,ind,prestepo=FALSE)
 			nsim = sub("^ *START CNT4(TL|AD), +NSIM4D *= *(\\d+).*","\\2",nd[inds[ixs]])
 			nstep[ix] = paste(nstep[ix],nsim,sep="")
 		}
+
+		indx = grep("^ *NSTEP *= *\\d+ +STEPX +",nd)
+		if (length(indx) > 0) {
+			ix = which(indt <= max(indx))
+			if (length(ix) > 0) nstep[ix] = sprintf("X%s",nstep[ix])
+		}
 	} else {
 		indt = grep("^ *NSTEP *= *\\d+ +STEP[OX](TL|AD)? +",nd)
 		nstep = sub("^ *NSTEP *= *(\\d+) +STEP(O|(X))(TL|AD)? +.*","\\3\\4\\1",nd[indt])
 	}
 
 	jstep = rep(NA_character_,length(ind))
-	for (i in seq(along=ind)) {
+	jstep[ind < icnt4[1]] = "-1"
+	for (i in which(ind >= icnt4[1])) {
 		it = which(indt <= ind[i])
-		if (ind[i] < icnt4[1]) {
-			jstep[i] = "-1"
-		} else if (length(it) > 0) {
-			jstep[i] = nstep[it[length(it)]]
-		}
+		if (length(it) > 0) jstep[i] = nstep[it[length(it)]]
 	}
 
 	jstep
