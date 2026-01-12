@@ -853,26 +853,39 @@ abh = function(nd,nflevg,vp00)
 		ire = regexec(re,nd[ind])
 		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",5))
 		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+		etah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
 	} else {
 		re = sprintf(" *\\d+ +(%s) +(%s) +(%s)",snum,snum,snum)
 		ire = regexec(re,nd[ind])
 		alh = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
 		ah = as.numeric(sapply(regmatches(nd[ind],ire),"[",4))
+		etah = NULL
 	}
 
 	bh = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
 
-	ih = grep("ETA at half/full levels",nd)
-	ind = ih+1+seq(nflevg+1)
-	re = sprintf(" *\\d+ +(%s) +(%s)",snum,snum)
-	ire = regexec(re,nd[ind])
-	etah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
-	eta = as.numeric(sapply(regmatches(nd[ind],ire),"[",3))
+	if (is.null(etah)) {
+		ih = grep("ETA at half/full levels",nd)
+		if (length(ih) > 0) {
+			ind = ih+1+seq(nflevg+1)
+			re = sprintf(" *\\d+ +(%s) +(%s)",snum,snum)
+			ire = regexec(re,nd[ind])
+			etah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+		}
+
+		ih = grep("ETA at half levels",nd)
+		if (length(ih) > 0) {
+			ind = ih+1+seq(nflevg+1)
+			re = sprintf(" *\\d+ +(%s)",snum,snum)
+			ire = regexec(re,nd[ind])
+			etah = as.numeric(sapply(regmatches(nd[ind],ire),"[",2))
+		}
+	}
 
 	if (missing(vp00)) vp00 = getvar("VP00",nd)
-	stopifnot(all.equal(ah/vp00+bh,etah))
+	stopifnot(all.equal(ah/vp00+bh,etah,tolerance=1e-7))
 
-	data.frame(Ah=ah,Bh=bh,alpha=alh,etah=etah,eta=eta)
+	data.frame(Ah=ah,Bh=bh,alpha=alh,etah=etah)
 }
 
 abhfp = function(nd,nfplev,vp00)
