@@ -82,9 +82,11 @@ plotmnx = function(x,y,main="GP Norm",imnx=1:3,col,lty=c(1,3,3),legend,ylim,...)
 
 	for (k in seq(dim(y)[3])[-1]) {
 		ina = which(is.na(y[,imnx[1],k]))
-		if (length(ina) == 0 || length(ina) >= dim(y)[1]-1) next
-
-		matlines(x[-ina],y[-ina,imnx,k],lty=lty[imnx],col=col[k])
+		if (length(ina) == 0) {
+			matlines(x,y[,imnx,k],lty=lty[imnx],col=col[k])
+		} else if (length(ina) < dim(y)[1]-1) {
+			matlines(x[-ina],y[-ina,imnx,k],lty=lty[imnx],col=col[k])
+		}
 	}
 }
 
