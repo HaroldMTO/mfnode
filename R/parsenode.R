@@ -491,8 +491,7 @@ fpgpnorm = function(nd,lev,tag="",invert=FALSE,quiet=FALSE)
 				if (! length(inds) %in% c(nfp3s,nflevg)) next
 
 				fp = line2num(nd[ii[inds]])
-				re = sprintf(" *S0*(\\d+)%s\\>.* *:.+",noms[j])
-				levs = as.integer(sub(re,"\\1",nd[ii[inds]]))
+				levs = getLevel(nd[ii[inds]])
 				gpl[[j]] = fp[,order(levs)]
 				attr(gpl[[j]],"nlev") = length(levs)
 				ii = ii[-inds]
@@ -606,7 +605,7 @@ fpgpnorm = function(nd,lev,tag="",invert=FALSE,quiet=FALSE)
 	fp
 }
 
-fpspnorm = function(nd,lev,tag="")
+fpspnorm = function(nd,lev,tag="",quiet=FALSE)
 {
 	ind = grep("^ *(FULL-POS +)?SPNORMS",nd)
 
@@ -657,13 +656,14 @@ fpspnorm = function(nd,lev,tag="")
 			inds = grep(sprintf(" *S\\d+%s\\>.*? *:",noms3d[j]),nd[ii])
 			if (length(inds) < 3 && nflevg > 2) {
 				if (! quiet) cat("--> field",noms[j],"not 3D (maybe only top/bottom PP)\n")
+				# cannot account for those fields in 2D norms (because of dimension)
+				ii = ii[-inds]
 				next
 			}
 
 			stopifnot(length(inds) %in% c(nfp3s,nflevg))
 			fp = line2num(nd[ii[inds]])
-			re = sprintf(" *S0*(\\d+)%s\\>.* *:.+",noms3d[j])
-			levs = as.integer(sub(re,"\\1",nd[ii[inds]]))
+			levs = getLevel(nd[ii[inds]])
 			fp3d[i,,j] = fp[order(levs)]
 			ii = ii[-inds]
 		}
@@ -685,6 +685,12 @@ fpspnorm = function(nd,lev,tag="")
 	}
 
 	fp
+}
+
+getLevel = function(x)
+{
+	lev = sub(" *S0*(\\d+)\\w+\\>.* *:.+","\\1",x)
+	as.integer(lev)
 }
 
 stepindex = function(nd,ind,prestepo=FALSE)
